@@ -1,16 +1,15 @@
 package server.client;
 
-import server.server.ServerGUI;
-
 import javax.swing.*;
-import javax.swing.border.Border;
 import javax.swing.text.MaskFormatter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.text.ParseException;
 
-public class ClientGUI extends JFrame {
+public class ClientGUI extends JFrame implements ClientView{
 
     private JFormattedTextField ipAdress = new JFormattedTextField(new MaskFormatter("###.###.###.###"));
     private JFormattedTextField port     = new JFormattedTextField(new MaskFormatter("#####"));
@@ -23,18 +22,17 @@ public class ClientGUI extends JFrame {
     private JTextField message            = new JTextField();
     private JButton buttonSend           = new JButton("Send");
 
-    private Boolean connected            = false;
+    private JPanel panelWithConnectionProperties;
 
-    private ServerGUI server;
+    private Client client;
 
-    public ClientGUI(ServerGUI server) throws ParseException {
+    public ClientGUI(Client client) throws ParseException {
         add(createNorthPanel(), BorderLayout.NORTH);
         add(createChatPanel(), BorderLayout.CENTER);
         add(createSendPanel(), BorderLayout.SOUTH);
 
         setSize(300,300);
         setVisible(true);
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
         setTitle("Client");
         setLocationRelativeTo(null);
 
@@ -43,9 +41,9 @@ public class ClientGUI extends JFrame {
         login.setToolTipText("логин");
         password.setToolTipText("пароль");
 
-        buttonSend.setEnabled(connected);
+        this.client = client;
 
-        this.server = server;
+        setVisibleConnectionProperties();
 
         inicializationButtonsAction();
 
@@ -53,8 +51,9 @@ public class ClientGUI extends JFrame {
         port.setText("34000");
     }
 
-    private void connectToServer(){
-        server.connect(this);
+    private void setVisibleConnectionProperties(){
+        buttonSend.setEnabled(client.connected());
+        panelWithConnectionProperties.setVisible(!client.connected());
     }
 
     private void inicializationButtonsAction(){
@@ -62,14 +61,7 @@ public class ClientGUI extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 if (checkFields()){
-                    if (server.working()){
-                        connectToServer();
-                        server.sendMessage(login.getText(),"подключился");
-                        chat.setText(server.getLog());
-                        buttonSend.setEnabled(true);
-                    }else {
-                        informDisableServer();
-                    }
+                    connectToServer();
                 }
             }
         });
@@ -77,27 +69,28 @@ public class ClientGUI extends JFrame {
         ActionListener actionListener = new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (server.working()){
-                    server.sendMessage(login.getText(), message.getText());
-                    message.setText("");
-                }else {
-                    informDisableServer();
-                }
+                sendMessage();
             }
         };
 
         buttonSend.addActionListener(actionListener);
 
         message.addActionListener(actionListener);
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                if (client.connected()){
+                    client.disconnect(true);
+                }
+                super.windowClosing(e);
+            }
+        });
     }
 
     public void informDisableServer(){
         chat.setText("Сервер не активен");
         buttonSend.setEnabled(false);
-    }
-
-    public void updateChat(String message){
-        chat.setText(chat.getText() + System.lineSeparator() + message);
     }
 
     private Boolean checkFields(){
@@ -125,7 +118,7 @@ public class ClientGUI extends JFrame {
     }
 
     private JPanel createNorthPanel(){
-        JPanel panelWithConnectionProperties = new JPanel(new GridLayout(1,1));
+        panelWithConnectionProperties = new JPanel(new GridLayout(1,1));
 
         panelWithConnectionProperties.add(createConnectionPanel());
 
@@ -185,5 +178,32 @@ public class ClientGUI extends JFrame {
         sendPanel.add(buttonSend, constraints);
 
         return sendPanel;
+    }
+
+    @Override
+    public void sendMessage() {
+        client.sendMessage(message.getText());
+        message.setText("");
+    }
+
+    @Override
+    public void updateChat(String text) {
+        chat.setText(chat.getText() + System.lineSeparator() + text);
+    }
+
+    @Override
+    public void connectToServer() {
+        Boolean clientConnected = client.connectToServer(login.getText());
+
+        if (clientConnected){
+            setVisibleConnectionProperties();
+        }else {
+            chat.setText("Сервер недоступен");
+        }
+    }
+
+    @Override
+    public void disconnect() {
+        setVisibleConnectionProperties();
     }
 }

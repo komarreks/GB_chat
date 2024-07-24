@@ -1,62 +1,70 @@
 package server.server;
 
-import server.client.ClientGUI;
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.*;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.Locale;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
-public class ServerGUI extends JFrame {
+public class ServerGUI extends JFrame implements ServerView{
     private JTextPane log = new JTextPane();
 
     private JButton buttonStart = new JButton("Start");
     private JButton buttonStop  = new JButton("Stop");
-    private Boolean isStarted = false;
 
-    private final String LOG_FILE_NAME = "chat_log.txt";
-    private java.util.List<ClientGUI> clients = new ArrayList<>();
+    private Server server;
 
-    public ServerGUI(){
+    public ServerGUI(Server server){
         add(createChatPanel(), BorderLayout.CENTER);
         add(createStartPanel(), BorderLayout.SOUTH);
 
         setSize(400,400);
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
         setVisible(true);
         setTitle("Server");
         setLocationRelativeTo(null);
 
+        this.server = server;
+
+        setEnabledActionButtons(server.isWorking());
+
+        inicializeActions();
+    }
+
+    private void inicializeActions(){
         buttonStart.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                isStarted = true;
-                try {
-                    downLoadLog();
-                } catch (IOException ex) {
-                    log.setText("Ошибка загрузки лога чата");
-                }
+                server.startStopServer(true);
+                log.setText(server.getLog());
+                setEnabledActionButtons(server.isWorking());
             }
         });
 
         buttonStop.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                isStarted = false;
-                try {
-                    safeLog();
-                } catch (IOException ex) {
-                    log.setText(log.getText() + System.lineSeparator() + "ошибка записи лога");
-                }
+                server.startStopServer(false);
+                setEnabledActionButtons(server.isWorking());
+                log.setText("Сервер остановлен");
             }
         });
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                if (server.working){
+                    server.startStopServer(false);
+                    server.saveLog();
+                }
+                super.windowClosing(e);
+            }
+        });
+    }
+
+    private void setEnabledActionButtons(Boolean flag){
+        buttonStart.setEnabled(!server.isWorking());
+        buttonStop.setEnabled(server.isWorking());
     }
 
     private JPanel createChatPanel(){
@@ -79,77 +87,13 @@ public class ServerGUI extends JFrame {
         return panel;
     }
 
-    public Boolean working(){
-        return isStarted;
+    @Override
+    public void showMessage(String message) {
+        log.setText(log.getText() + System.lineSeparator() + message);
     }
 
-    private void downLoadLog() throws IOException {
-        File file = new File(LOG_FILE_NAME);
-
-        if (!file.exists()){
-            file.createNewFile();
-        }
-
-        BufferedReader br = new BufferedReader(new FileReader(file));
-
-        StringBuilder sb = new StringBuilder();
-
-        String line;
-        while (true){
-            line = br.readLine();
-
-            if (line != null){
-                sb.append(line + System.lineSeparator());
-            }else {
-                log.setText(sb.toString());
-                break;
-            }
-        }
-    }
-
-    private void safeLog() throws IOException {
-        File file = new File(LOG_FILE_NAME);
-
-        if (!file.exists()){
-            file.createNewFile();
-        }
-
-        FileWriter fw = new FileWriter(file);
-
-        fw.write(log.getText());
-
-        fw.flush();
-    }
-
-    public String getLog(){
-        if (isStarted){
-            return log.getText();
-        }
-        return "Сервер не запущен";
-    }
-
-    public Boolean connect(ClientGUI clientGUI){
-        if (isStarted){
-            clients.add(clientGUI);
-            return true;
-        }
-        return false;
-    }
-
-    public void sendMessage(String user, String message){
-
-        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy (HH:mm)");
-
-        Date date = new Date();
-
-        String datestr = dateFormat.format(date);
-
-        String complexMeassage = datestr + ": " + user + ": " + message;
-
-        log.setText(log.getText() + System.lineSeparator() + complexMeassage);
-
-        clients.forEach(client -> {
-            client.updateChat(complexMeassage);
-        });
+    @Override
+    public String getViewLog() {
+        return log.getText();
     }
 }
